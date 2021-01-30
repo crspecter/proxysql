@@ -25,6 +25,11 @@ void parse_result_json_column(MYSQL_RES *result, json& j) {
 	}
 }
 
+// This test was previously failing due to replication not catching up quickly enough when doing
+// some table creation operations. This variable controls the waiting timeout after these
+// create operations are performed. See #3282 for context.
+constexpr const int replication_timeout = 10;
+
 int main(int argc, char *argv[]) {
 	CommandLine cl;
 
@@ -479,8 +484,22 @@ int main(int argc, char *argv[]) {
 			json j_status;
 			MYSQL_QUERY(proxysql_mysql, query.c_str());
 			if (query.compare(create_test_table)==0) {
-				diag("Sleeping 2 seconds because this script doesn't check replication lag");
-				sleep(2);
+				diag("Waiting for a max of '%d' seconds because script doesn't check replication lag", replication_timeout);
+
+				int timeout = 0;
+				while (timeout < replication_timeout) {
+					MYSQL_QUERY(proxysql_mysql, "SHOW TABLES FROM sysbench LIKE 'test_session_var'");
+					MYSQL_RES* show_tables_res =  mysql_store_result(proxysql_mysql);
+					int show_tables_rows = mysql_num_rows(show_tables_res);
+					mysql_free_result(show_tables_res);
+
+					if (show_tables_rows == 0) {
+						sleep(1);
+						timeout++;
+					} else {
+						break;
+					}
+				}
 			}
 			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
 			if (query == "PROXYSQL INTERNAL SESSION") {
@@ -597,8 +616,22 @@ int main(int argc, char *argv[]) {
 		for (const auto& query : found_rows) {
 			MYSQL_QUERY(proxysql_mysql, query.c_str());
 			if (query.compare(create_test_table)==0) {
-				diag("Sleeping 2 seconds because this script doesn't check replication lag");
-				sleep(2);
+				diag("Waiting for a max of '%d' seconds because script doesn't check replication lag", replication_timeout);
+
+				int timeout = 0;
+				while (timeout < replication_timeout) {
+					MYSQL_QUERY(proxysql_mysql, "SHOW TABLES FROM sysbench LIKE 'test_session_var'");
+					MYSQL_RES* show_tables_res =  mysql_store_result(proxysql_mysql);
+					int show_tables_rows = mysql_num_rows(show_tables_res);
+					mysql_free_result(show_tables_res);
+
+					if (show_tables_rows == 0) {
+						sleep(1);
+						timeout++;
+					} else {
+						break;
+					}
+				}
 			}
 			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
 			if (query == "PROXYSQL INTERNAL SESSION") {
