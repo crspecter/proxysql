@@ -28,7 +28,7 @@ void parse_result_json_column(MYSQL_RES *result, json& j) {
 // This test was previously failing due to replication not catching up quickly enough when doing
 // some table creation operations. This variable controls the waiting timeout after these
 // create operations are performed. See #3282 for context.
-constexpr const int replication_timeout = 10;
+constexpr const int replication_timeout = 60;
 
 int main(int argc, char *argv[]) {
 	CommandLine cl;
