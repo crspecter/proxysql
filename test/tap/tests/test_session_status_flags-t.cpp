@@ -500,6 +500,8 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 				}
+
+				diag("Waited '%d' seconds until replication completed.", timeout);
 			}
 			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
 			if (query == "PROXYSQL INTERNAL SESSION") {
@@ -632,6 +634,8 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 				}
+
+				diag("Waited '%d' seconds until replication completed.", timeout);
 			}
 			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
 			if (query == "PROXYSQL INTERNAL SESSION") {
