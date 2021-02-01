@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <mysql.h>
+#include <mysqld_error.h>
 #include <string.h>
 #include <string>
 #include <unistd.h>
@@ -482,33 +483,45 @@ int main(int argc, char *argv[]) {
 
 		for (const auto& query : lock_tables_queries) {
 			json j_status;
-			MYSQL_QUERY(proxysql_mysql, query.c_str());
-			if (query.compare(create_test_table)==0) {
-				diag("Waiting for a max of '%d' seconds because script doesn't check replication lag", replication_timeout);
 
+			// we are trying to lock new created table 'sysbench.test_session_var'
+			if (query == lock_tables_queries[1]) {
 				int timeout = 0;
-				while (timeout < replication_timeout) {
-					MYSQL_QUERY(proxysql_mysql, "SHOW TABLES FROM sysbench LIKE 'test_session_var'");
-					MYSQL_RES* show_tables_res =  mysql_store_result(proxysql_mysql);
-					int show_tables_rows = mysql_num_rows(show_tables_res);
-					mysql_free_result(show_tables_res);
+				int query_err = 0;
+				int query_errno = 0;
 
-					if (show_tables_rows == 0) {
-						sleep(1);
-						timeout++;
+				diag("Executing the locking table query with retrying due to replication lag.");
+
+				while (timeout < replication_timeout) {
+					query_err = mysql_query(proxysql_mysql, query.c_str());
+					if (query_err) {
+						query_errno = mysql_errno(proxysql_mysql);
+						if (query_errno != ER_NO_SUCH_TABLE) {
+							break;
+						} else {
+							sleep(1);
+						}
 					} else {
 						break;
 					}
+					timeout++;
 				}
 
-				diag("Waited '%d' seconds until replication completed.", timeout);
+				if (query_err) {
+					fprintf(stderr, "File %s, line %d, Error: %s\n", __FILE__, __LINE__, mysql_error(proxysql_mysql));
+					return -1;
+				} else {
+					diag("Replication lag took '%d.'", timeout);
+				}
+			} else {
+				MYSQL_QUERY(proxysql_mysql, query.c_str());
+				MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
+				if (query == "PROXYSQL INTERNAL SESSION") {
+					parse_result_json_column(tr_res, j_status);
+					vj_status.push_back(j_status);
+				}
+				mysql_free_result(tr_res);
 			}
-			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
-			if (query == "PROXYSQL INTERNAL SESSION") {
-				parse_result_json_column(tr_res, j_status);
-				vj_status.push_back(j_status);
-			}
-			mysql_free_result(tr_res);
 		}
 
 		if (vj_status[0].contains("backends")) {
@@ -616,32 +629,46 @@ int main(int argc, char *argv[]) {
 		json j_status;
 
 		for (const auto& query : found_rows) {
-			MYSQL_QUERY(proxysql_mysql, query.c_str());
-			if (query.compare(create_test_table)==0) {
-				diag("Waiting for a max of '%d' seconds because script doesn't check replication lag", replication_timeout);
-
+			// we are trying to 'SELECT' over new created table 'sysbench.test_session_var'
+			if (query == found_rows[1]) {
 				int timeout = 0;
-				while (timeout < replication_timeout) {
-					MYSQL_QUERY(proxysql_mysql, "SHOW TABLES FROM sysbench LIKE 'test_session_var'");
-					MYSQL_RES* show_tables_res =  mysql_store_result(proxysql_mysql);
-					int show_tables_rows = mysql_num_rows(show_tables_res);
-					mysql_free_result(show_tables_res);
+				int query_err = 0;
+				int query_errno = 0;
 
-					if (show_tables_rows == 0) {
-						sleep(1);
-						timeout++;
+				diag("Executing 'SELECT' with retrying due to replication lag.");
+
+				while (timeout < replication_timeout) {
+					query_err = mysql_query(proxysql_mysql, query.c_str());
+					if (query_err) {
+						query_errno = mysql_errno(proxysql_mysql);
+						if (query_errno != ER_NO_SUCH_TABLE) {
+							break;
+						} else {
+							sleep(1);
+						}
 					} else {
+						// free select results
+						MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
+						mysql_free_result(tr_res);
 						break;
 					}
+					timeout++;
 				}
 
-				diag("Waited '%d' seconds until replication completed.", timeout);
+				if (query_err) {
+					fprintf(stderr, "File %s, line %d, Error: %s\n", __FILE__, __LINE__, mysql_error(proxysql_mysql));
+					return -1;
+				} else {
+					diag("Replication lag took '%d.'", timeout);
+				}
+			} else {
+				MYSQL_QUERY(proxysql_mysql, query.c_str());
+				MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
+				if (query == "PROXYSQL INTERNAL SESSION") {
+					parse_result_json_column(tr_res, j_status);
+				}
+				mysql_free_result(tr_res);
 			}
-			MYSQL_RES* tr_res = mysql_store_result(proxysql_mysql);
-			if (query == "PROXYSQL INTERNAL SESSION") {
-				parse_result_json_column(tr_res, j_status);
-			}
-			mysql_free_result(tr_res);
 		}
 
 		if (j_status.contains("backends")) {
