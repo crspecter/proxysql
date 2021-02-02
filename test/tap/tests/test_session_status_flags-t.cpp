@@ -653,6 +653,11 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 					timeout++;
+
+					// WIP: Debugging
+					if (timeout > 10) {
+						sleep(5400);
+					}
 				}
 
 				if (query_err) {
